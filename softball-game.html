@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Softball Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 600px;
+            margin: auto;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #90EE90;
+            border: 3px solid #333;
+            cursor: crosshair;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+            z-index: 10;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 8px;
+            min-width: 150px;
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 14px;
+            color: #555;
+            background-color: rgba(255, 255, 255, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="score">Score: 0</div>
+        <div id="instructions">
+            <strong>How to Play:</strong><br>
+            Click the screen to swing the bat and hit the ball!
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas size
+        canvas.width = 800;
+        canvas.height = 600;
+
+        // Game variables
+        let score = 0;
+        let ballHit = false;
+        let swinging = false;
+        let swingAngle = 0;
+
+        // Batter object
+        const batter = {
+            x: canvas.width / 2,
+            y: canvas.height - 60,
+            width: 30,
+            height: 50,
+            color: '#0066FF'
+        };
+
+        // Pitcher object
+        const pitcher = {
+            x: canvas.width / 2,
+            y: 60,
+            width: 30,
+            height: 50,
+            color: '#FF0000'
+        };
+
+        // Ball object
+        const ball = {
+            x: pitcher.x,
+            y: pitcher.y + pitcher.height / 2,
+            radius: 8,
+            color: '#FFFF00',
+            vx: 0,
+            vy: 4, // Moving down toward batter
+            speed: 4
+        };
+
+        // Bat object for collision detection
+        const bat = {
+            length: 80,
+            width: 8,
+            angle: 0,
+            x: batter.x,
+            y: batter.y
+        };
+
+        // Mouse click event listener
+        document.getElementById('gameCanvas').addEventListener('click', swing);
+
+        function swing() {
+            if (!swinging && !ballHit) {
+                swinging = true;
+                swingAngle = 0;
+            }
+        }
+
+        function updateSwing() {
+            if (swinging) {
+                swingAngle += 15;
+                if (swingAngle >= 90) {
+                    swinging = false;
+                    swingAngle = 0;
+                }
+            }
+        }
+
+        function checkBatCollision() {
+            if (swinging && !ballHit) {
+                // Calculate bat position during swing
+                const batCenterX = batter.x + 15;
+                const batCenterY = batter.y - 25;
+                const batRadians = (swingAngle - 45) * Math.PI / 180;
+
+                // Get bat end point
+                const batEndX = batCenterX + Math.cos(batRadians) * bat.length / 2;
+                const batEndY = batCenterY + Math.sin(batRadians) * bat.length / 2;
+
+                // Get bat start point
+                const batStartX = batCenterX - Math.cos(batRadians) * bat.length / 2;
+                const batStartY = batCenterY - Math.sin(batRadians) * bat.length / 2;
+
+                // Check distance from ball center to bat line segment
+                const distance = pointToLineDistance(
+                    ball.x, ball.y,
+                    batStartX, batStartY,
+                    batEndX, batEndY
+                );
+
+                if (distance < ball.radius + bat.width / 2) {
+                    ballHit = true;
+                    score++;
+                    document.getElementById('score').textContent = `Score: ${score}`;
+
+                    // Calculate new ball direction (away from batter)
+                    const angle = (swingAngle - 45) * Math.PI / 180;
+                    ball.vx = -Math.cos(angle) * ball.speed;
+                    ball.vy = -Math.sin(angle) * ball.speed;
+                }
+            }
+        }
+
+        function pointToLineDistance(px, py, x1, y1, x2, y2) {
+            const A = px - x1;
+            const B = py - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+
+            if (lenSq !== 0) param = dot / lenSq;
+
+            let xx, yy;
+
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+
+            const dx = px - xx;
+            const dy = py - yy;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function updateBall() {
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+
+            // Reset ball if it goes out of bounds
+            if (ball.x < 0 || ball.x > canvas.width || ball.y < 0 || ball.y > canvas.height) {
+                resetBall();
+            }
+        }
+
+        function resetBall() {
+            ball.x = pitcher.x;
+            ball.y = pitcher.y + pitcher.height / 2;
+            ball.vx = 0;
+            ball.vy = ball.speed;
+            ballHit = false;
+        }
+
+        function drawField() {
+            // Draw grass (already the background color)
+            // Draw infield dirt area
+            ctx.fillStyle = '#D2B48C';
+            ctx.beginPath();
+            ctx.ellipse(canvas.width / 2, canvas.height / 2, 150, 120, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw base lines
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 10]);
+
+            // First line (left to right through middle)
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+        }
+
+        function drawBatter() {
+            ctx.fillStyle = batter.color;
+            ctx.fillRect(
+                batter.x - batter.width / 2,
+                batter.y - batter.height / 2,
+                batter.width,
+                batter.height
+            );
+
+            // Draw bat
+            if (swinging) {
+                const batCenterX = batter.x;
+                const batCenterY = batter.y - 25;
+                const batRadians = (swingAngle - 45) * Math.PI / 180;
+
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = bat.width;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(
+                    batCenterX - Math.cos(batRadians) * bat.length / 2,
+                    batCenterY - Math.sin(batRadians) * bat.length / 2
+                );
+                ctx.lineTo(
+                    batCenterX + Math.cos(batRadians) * bat.length / 2,
+                    batCenterY + Math.sin(batRadians) * bat.length / 2
+                );
+                ctx.stroke();
+            } else {
+                // Draw resting bat
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = bat.width;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(batter.x - 40, batter.y + 20);
+                ctx.lineTo(batter.x + 40, batter.y + 20);
+                ctx.stroke();
+            }
+        }
+
+        function drawPitcher() {
+            ctx.fillStyle = pitcher.color;
+            ctx.fillRect(
+                pitcher.x - pitcher.width / 2,
+                pitcher.y - pitcher.height / 2,
+                pitcher.width,
+                pitcher.height
+            );
+        }
+
+        function drawBall() {
+            ctx.fillStyle = ball.color;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw softball stitches
+            ctx.strokeStyle = '#FF6666';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius - 2, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        function update() {
+            updateSwing();
+            checkBatCollision();
+            updateBall();
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#90EE90';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawField();
+            drawPitcher();
+            drawBatter();
+            drawBall();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game loop
+        gameLoop();
+    </script>
+</body>
+</html>
